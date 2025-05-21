@@ -4,7 +4,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
-    name="vector-search",
+    name="ragger-simple",
     version="0.1.0",
     author="Anton Pavlenko",
     author_email="apavlenko@hmcorp.fund",
