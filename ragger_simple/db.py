@@ -2,9 +2,14 @@ from typing import Dict, List, Optional, Union
 from sentence_transformers import SentenceTransformer
 import uuid
 import os
+from urllib.parse import urlparse
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from qdrant_client.http.models import Distance, VectorParams
+import logging
+
+
+logging.basicConfig(level=logging.DEBUG)
 
 
 class VectorDB:
@@ -15,6 +20,7 @@ class VectorDB:
         qdrant_url: Optional[str] = None,
         qdrant_api_key: Optional[str] = None,
         qdrant_path: Optional[str] = None,
+        qdrant_port: Optional[int] = None,
     ):
         """Initialize the vector database connection with Qdrant
 
@@ -24,6 +30,7 @@ class VectorDB:
             qdrant_url: URL for Qdrant cloud (if using cloud)
             qdrant_api_key: API key for Qdrant cloud (if using cloud)
             qdrant_path: Path for local Qdrant database (if using local)
+            qdrant_port: Custom port for Qdrant server (overrides default 443/80)
         """
         self.collection_name = collection_name
         self.model = SentenceTransformer(model_name)
@@ -31,7 +38,19 @@ class VectorDB:
         
         # Connect to Qdrant (cloud or local)
         if qdrant_url and qdrant_api_key:
-            self.client = QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
+            # parse URL and default ports
+            parsed = urlparse(qdrant_url)
+            scheme = parsed.scheme or "http"
+            host = parsed.hostname
+            # use provided port or fall back to parsed port or standard HTTP/HTTPS
+            port = qdrant_port or parsed.port or (443 if scheme == "https" else 80)
+            # build full URL including port
+            full_url = f"{scheme}://{host}:{port}"
+            self.client = QdrantClient(
+                url=full_url,
+                api_key=qdrant_api_key,
+                prefer_grpc=False
+            )
         else:
             # Use in-memory or local path
             self.client = QdrantClient(path=qdrant_path)

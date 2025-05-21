@@ -12,7 +12,6 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/HMCorp-Fund/ragger-simple",
-    packages=find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
@@ -26,7 +25,8 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "vector-search=vector_search.cli:main",
+            "vector-search=ragger_simple.cli:main",
         ],
     },
+    packages=find_packages(),
 )
