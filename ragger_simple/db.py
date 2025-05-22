@@ -1,7 +1,6 @@
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 from sentence_transformers import SentenceTransformer
-import uuid
-import os
+import uuid, os, math
 from urllib.parse import urlparse
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
@@ -20,7 +19,7 @@ class VectorDB:
         qdrant_url: Optional[str] = None,
         qdrant_api_key: Optional[str] = None,
         qdrant_path: Optional[str] = None,
-        qdrant_port: Optional[int] = None,
+        qdrant_timeout: Optional[float] = 500,
     ):
         """Initialize the vector database connection with Qdrant
 
@@ -30,7 +29,7 @@ class VectorDB:
             qdrant_url: URL for Qdrant cloud (if using cloud)
             qdrant_api_key: API key for Qdrant cloud (if using cloud)
             qdrant_path: Path for local Qdrant database (if using local)
-            qdrant_port: Custom port for Qdrant server (overrides default 443/80)
+            qdrant_timeout: Request timeout for Qdrant in seconds (default: 120)
         """
         self.collection_name = collection_name
         self.model = SentenceTransformer(model_name)
@@ -42,19 +41,20 @@ class VectorDB:
             parsed = urlparse(qdrant_url)
             scheme = parsed.scheme or "http"
             host = parsed.hostname
-            # use provided port or fall back to parsed port or standard HTTP/HTTPS
-            port = qdrant_port or parsed.port or (443 if scheme == "https" else 80)
+            port = parsed.port or (443 if scheme == "https" else 80)
             # build full URL including port
             full_url = f"{scheme}://{host}:{port}"
+
             self.client = QdrantClient(
                 url=full_url,
                 api_key=qdrant_api_key,
-                prefer_grpc=False
+                prefer_grpc=False,
+                timeout=qdrant_timeout or 120.0
             )
         else:
             # Use in-memory or local path
             self.client = QdrantClient(path=qdrant_path)
-        
+
         # Check if collection exists, create if not
         collections = self.client.get_collections().collections
         collection_names = [collection.name for collection in collections]
@@ -87,7 +87,12 @@ class VectorDB:
                 
         return chunks
     
-    def add_documents(self, documents: Dict[str, str], chunk_size: int = 200, overlap: int = 50):
+    def add_documents(
+        self,
+        documents: Dict[str, str],
+        chunk_size: int = 200,
+        overlap: int = 50,
+    ):
         """Parse, chunk, and add documents to the vector database
         
         Args:
@@ -118,11 +123,17 @@ class VectorDB:
                 )
         
         # Add to Qdrant
-        self.client.upsert(
-            collection_name=self.collection_name,
-            points=points
-        )
-        
+        # upload in smaller batches to avoid server timeouts
+        batch_size = 500
+        total = len(points)
+        for i in range(0, total, batch_size):
+            batch = points[i : i + batch_size]
+            self.client.upsert(
+                collection_name=self.collection_name,
+                points=batch
+            )
+        logging.info(f"Upserted {total} points in {math.ceil(total/batch_size)} batches")
+
         print(f"Added {len(points)} chunks from {len(documents)} documents")
     
     def search(self, query: str, k: int = 5) -> List[Dict]:
