@@ -1,5 +1,5 @@
 from typing import Dict, List, Optional
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, util
 import uuid, os, math
 from urllib.parse import urlparse
 from qdrant_client import QdrantClient
@@ -15,7 +15,8 @@ class VectorDB:
     def __init__(
         self,
         collection_name: str = "documents",
-        model_name: str = "all-MiniLM-L6-v2",
+        model_name: str = "all-MiniLM-L6-v2",   # this is only a fallback name
+        model_path: Optional[str] = None,       # local folder with your model
         qdrant_url: Optional[str] = None,
         qdrant_api_key: Optional[str] = None,
         qdrant_path: Optional[str] = None,
@@ -26,13 +27,22 @@ class VectorDB:
         Args:
             collection_name: Name for the Qdrant collection
             model_name: Name of the sentence-transformer model to use
+            model_path: Local folder with your model
             qdrant_url: URL for Qdrant cloud (if using cloud)
             qdrant_api_key: API key for Qdrant cloud (if using cloud)
             qdrant_path: Path for local Qdrant database (if using local)
             qdrant_timeout: Request timeout for Qdrant in seconds (default: 120)
         """
         self.collection_name = collection_name
-        self.model = SentenceTransformer(model_name)
+        
+        # Load model: try local first, then fall back to download
+        model_source = model_path or model_name
+        try:
+            logging.info(f"Loading local model '{model_source}'")
+            self.model = SentenceTransformer(model_source, local_files_only=True)
+        except OSError:
+            logging.info(f"Local model '{model_source}' not found—downloading from Hugging Face")
+            self.model = SentenceTransformer(model_source)  # will fetch online
         self.dimension = self.model.get_sentence_embedding_dimension()
         
         # Connect to Qdrant (cloud or local)
