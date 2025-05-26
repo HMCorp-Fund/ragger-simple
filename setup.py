@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="ragger-simple",
-    version="0.1.3",
+    version="0.1.4",
     author="Anton Pavlenko",
     author_email="apavlenko@hmcorp.fund",
     description="Simple vector database operations with Qdrant",
@@ -25,7 +25,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "vector-search=ragger_simple.cli:main",
+            "ragger-simple=ragger_simple.cli:main",
         ],
     },
     packages=find_packages(),

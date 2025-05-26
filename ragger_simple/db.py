@@ -111,9 +111,15 @@ class VectorDB:
             overlap: Number of overlapping words between chunks
         """
         points = []
+        chunks_per_doc = {}  # Track chunks per document
+        
+        print(f"Processing {len(documents)} documents...")
         
         for name, text in documents.items():
             chunks = self.chunk_text(text, chunk_size, overlap)
+            chunks_per_doc[name] = len(chunks)
+            
+            print(f"Document '{name}': {len(chunks)} chunks")
             
             for i, chunk in enumerate(chunks):
                 # Generate embedding
@@ -132,19 +138,32 @@ class VectorDB:
                     )
                 )
         
+        print(f"\nTotal chunks to upload: {len(points)}")
+        
         # Add to Qdrant
         # upload in smaller batches to avoid server timeouts
         batch_size = 500
         total = len(points)
+        num_batches = math.ceil(total/batch_size)
+        
+        print(f"Uploading in {num_batches} batches (max {batch_size} chunks per batch)...\n")
+        
         for i in range(0, total, batch_size):
             batch = points[i : i + batch_size]
+            batch_num = (i // batch_size) + 1
+            print(f"Uploading batch {batch_num}/{num_batches} ({len(batch)} chunks)...")
+            
             self.client.upsert(
                 collection_name=self.collection_name,
                 points=batch
             )
-        logging.info(f"Upserted {total} points in {math.ceil(total/batch_size)} batches")
-
-        print(f"Added {len(points)} chunks from {len(documents)} documents")
+        
+        print(f"\nSuccessfully added {len(points)} chunks from {len(documents)} documents")
+        
+        # Print per-document breakdown
+        print("\nChunks per document:")
+        for name, count in chunks_per_doc.items():
+            print(f"- {name}: {count} chunks")
     
     def search(self, query: str, k: int = 5) -> List[Dict]:
         """Retrieve relevant chunks for a query
