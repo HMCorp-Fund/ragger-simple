@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="ragger-simple",
-    version="0.1.4",
+    version="0.2.0",
     author="Anton Pavlenko",
     author_email="apavlenko@hmcorp.fund",
     description="Simple vector database operations with Qdrant",

@@ -1,15 +1,18 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any, Tuple
 from sentence_transformers import SentenceTransformer, util
 import uuid, os, math
 from urllib.parse import urlparse
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
-from qdrant_client.http.models import Distance, VectorParams
+from qdrant_client.http.models import Distance, VectorParams, Filter
 import logging
 
-
-logging.basicConfig(level=logging.DEBUG)
-
+# Add timestamps to logging with a specific format
+logging.basicConfig(
+    level=logging.DEBUG,  # Change to WARNING to reduce verbosity
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 
 class VectorDB:
     def __init__(
@@ -31,7 +34,7 @@ class VectorDB:
             qdrant_url: URL for Qdrant cloud (if using cloud)
             qdrant_api_key: API key for Qdrant cloud (if using cloud)
             qdrant_path: Path for local Qdrant database (if using local)
-            qdrant_timeout: Request timeout for Qdrant in seconds (default: 120)
+            qdrant_timeout: Request timeout for Qdrant in seconds (default: 500)
         """
         self.collection_name = collection_name
         
@@ -74,6 +77,88 @@ class VectorDB:
                 collection_name=self.collection_name,
                 vectors_config=VectorParams(size=self.dimension, distance=Distance.COSINE),
             )
+    
+    # NEW METHODS FOR COLLECTION MANAGEMENT
+    
+    def list_collections(self) -> List[str]:
+        """List all collections in the database.
+        
+        Returns:
+            List of collection names
+        """
+        collections = self.client.get_collections()
+        return [collection.name for collection in collections.collections if collection.name]
+    
+    def delete_collection(self, collection_name: Optional[str] = None) -> bool:
+        """Completely delete a collection from the database.
+        
+        Args:
+            collection_name: Name of collection to delete (defaults to current collection)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        name = collection_name or self.collection_name
+        try:
+            self.client.delete_collection(collection_name=name)
+            logging.info(f"Collection '{name}' has been deleted")
+            return True
+        except Exception as e:
+            logging.error(f"Failed to delete collection '{name}': {e}")
+            return False
+    
+    def purge_collection(self, collection_name: Optional[str] = None) -> bool:
+        """Delete all points from a collection but keep its structure.
+        
+        Args:
+            collection_name: Name of collection to purge (defaults to current collection)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        name = collection_name or self.collection_name
+        try:
+            self.client.delete(
+                collection_name=name,
+                points_selector=Filter(must=[]),  # Empty filter = all points
+            )
+            logging.info(f"Collection '{name}' has been purged (all points deleted)")
+            return True
+        except Exception as e:
+            logging.error(f"Failed to purge collection '{name}': {e}")
+            return False
+    
+    def get_collection_stats(self, collection_name: Optional[str] = None) -> Dict[str, Any]:
+        """Get statistics about a collection.
+        
+        Args:
+            collection_name: Name of collection (defaults to current collection)
+            
+        Returns:
+            Dictionary with collection statistics
+        """
+        name = collection_name or self.collection_name
+        try:
+            # Get collection info
+            collection_info = self.client.get_collection(collection_name=name)
+            # Count points
+            count_result = self.client.count(collection_name=name, exact=True)
+            
+            stats = {
+                "name": name,
+                "status": collection_info.status,
+                "vectors_count": count_result.count,
+                "vector_size": collection_info.config.params.size,
+                "distance": str(collection_info.config.params.distance),
+                "indexed": collection_info.config.params.on_disk,
+            }
+            
+            return stats
+        except Exception as e:
+            logging.error(f"Failed to get stats for collection '{name}': {e}")
+            return {"name": name, "error": str(e)}
+
+    # ORIGINAL METHODS BELOW
     
     def chunk_text(self, text: str, chunk_size: int = 200, overlap: int = 50) -> List[str]:
         """Split text into chunks with overlap
